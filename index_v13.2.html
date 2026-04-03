@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Family Cart V13</title>
+    <style>
+        :root { 
+            --primary: #4CAF50; --bg: #f0f2f5; --accent: #ff9800; --danger: #ff5252; --text: #333; 
+            /* 8가지 정밀 카테고리 색상 */
+            --cat1: #2ecc71; /* 농산(채소/과일) */
+            --cat2: #e74c3c; /* 정육/수산 */
+            --cat3: #f1c40f; /* 유제품/베이커리 */
+            --cat4: #e67e22; /* 가공식품/조미료 */
+            --cat5: #3498db; /* 냉동/냉장식품 */
+            --cat6: #1abc9c; /* 주류/음료 */
+            --cat7: #9b59b6; /* 생활용품/욕실 */
+            --cat8: #95a5a6; /* 기타 */
+        }
+        body { font-family: -apple-system, sans-serif; margin: 0; background: var(--bg); color: var(--text); }
+        .container { max-width: 500px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; padding-bottom: 40px; }
+        .card { background: white; padding: 20px; border-radius: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin: 12px; }
+        .overlay { position: fixed; inset: 0; background: var(--bg); display: none; justify-content: center; align-items: center; z-index: 2000; padding: 20px; }
+        .auth-card { background: white; padding: 30px; border-radius: 25px; width: 100%; max-width: 320px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        input { width: 100%; padding: 12px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 12px; font-size: 16px; box-sizing: border-box; outline: none; }
+        .btn { width: 100%; padding: 14px; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; font-size: 16px; }
+        .btn-p { background: var(--primary); color: white; }
+        .btn-logout { background: #fff; color: var(--danger); border: 1.5px solid var(--danger); padding: 5px 10px; border-radius: 8px; font-size: 0.7rem; font-weight: bold; cursor: pointer; }
+        .btn-mart { background: white; border: 2px solid var(--accent); color: var(--accent); margin-bottom: 15px; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: bold; }
+        .btn-mart.active { background: var(--accent); color: white; }
+        .admin-section { border: 2px solid var(--primary); background: #f9fff9; }
+        .member-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #eee; }
+        .sm-btn { padding: 4px 8px; border-radius: 6px; border: none; font-size: 0.7rem; cursor: pointer; color: white; margin-left: 4px; }
+        ul { list-style: none; padding: 0; margin: 0; }
+        li { 
+            background: white; margin: 0 12px 10px 12px; padding: 16px; border-radius: 15px; 
+            display: flex; justify-content: space-between; align-items: center; 
+            box-shadow: 0 2px 6px rgba(0,0,0,0.03); position: relative; overflow: hidden;
+        }
+        li.completed { opacity: 0.5; filter: grayscale(0.8); }
+        .cat-bar { position: absolute; left: 0; top: 0; bottom: 0; width: 6px; }
+        .cat-label { font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; color: white; margin-bottom: 4px; display: inline-block; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div id="mart-banner" style="display:none; background:var(--accent); color:white; text-align:center; padding:12px; font-weight:bold; position:sticky; top:0; z-index:1000;">🛒 마트 장보기 진행 중!</div>
+
+<div id="auth-overlay" class="overlay">
+    <div class="auth-card">
+        <h2 style="color:var(--primary);">👨‍👩‍👧‍👦 가족 입장</h2>
+        <input type="text" id="nickInput" placeholder="닉네임">
+        <input type="password" id="pwInput" placeholder="비밀번호 (관리자만)">
+        <button onclick="requestAccess()" class="btn btn-p">입장하기</button>
+    </div>
+</div>
+
+<div id="wait-overlay" class="overlay">
+    <div class="auth-card">
+        <h2>⏳ 승인 대기</h2>
+        <p id="wait-msg">관리자의 승인을 기다리고 있습니다.</p>
+        <button onclick="location.reload()" class="btn btn-p" style="margin-bottom:10px;">새로고침</button>
+        <button onclick="logout()" class="btn-logout" style="width:100%; padding:12px;">로그아웃</button>
+    </div>
+</div>
+
+<div class="container" id="main-ui" style="display:none;">
+    <div class="card" style="text-align:center;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h3 style="margin:0;">Family Cart</h3>
+            <button onclick="logout()" class="btn-logout">로그아웃</button>
+        </div>
+        <div id="user-status-list" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; justify-content:center;"></div>
+    </div>
+
+    <div id="admin-panel" class="card admin-section" style="display:none;">
+        <h4 style="margin:0 0 10px 0; color:var(--primary);">👨‍✈️ 관리자 설정</h4>
+        <div id="pending-list" style="margin-bottom:10px;"></div>
+        <div id="approved-list" style="border-top:1px solid #eee; padding-top:10px;"></div>
+    </div>
+
+    <div class="card">
+        <button id="martBtn" class="btn btn-mart" onclick="toggleMart()">🛒 I'm in Mart!</button>
+        <div style="display:flex; gap:8px;">
+            <input type="text" id="itemInput" placeholder="무엇을 살까요?" onkeypress="if(event.keyCode==13) addItem()" style="margin-bottom:0;">
+            <button onclick="addItem()" class="btn btn-p" style="width:70px; padding:0;">추가</button>
+        </div>
+    </div>
+    <div style="padding-bottom: 20px;"><ul id="itemList"></ul></div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js";
+    import { getDatabase, ref, push, onValue, update, remove, set, get, onDisconnect } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-database.js";
+
+    const firebaseConfig = { databaseURL: "https://familymart-6005b-default-rtdb.firebaseio.com/" };
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    window.logout = () => { localStorage.clear(); location.reload(); };
+
+    let myUID = localStorage.getItem('userUID');
+    let myInfo = null;
+
+    // --- 확장된 8종 AI 자동 분류 사전 ---
+    const CATEGORY_MAP = {
+        1: ["사과","포도","배","바나나","수박","딸기","채소","상추","깻잎","오이","당근","파","양파","마늘","버섯","시금치","브로콜리","무","감자","고구마","토마토","참외","귤","오렌지","복숭아"],
+        2: ["고기","삼겹살","소고기","돼지고기","닭고기","생선","고등어","갈치","오징어","새우","전복","조개","회","목살","국거리","불고기","한우","등심","안심","꽃게"],
+        3: ["우유","요거트","치즈","버터","요구르트","생크림","빵","식빵","베이글","케이크","쿠키","도너츠","잼","생리대","두유"],
+        4: ["라면","과자","초콜릿","사탕","껌","참치","햄","통조림","식용유","참기름","설탕","소금","간장","된장","고추장","밀가루","부침가루","튀김가루","파스타","소스","케첩","마요네즈","카레","햇반","스팸"],
+        5: ["만두","피자","냉동","돈가스","너겟","아이스크림","얼음","볶음밥","튀김","핫도그","소시지","어묵","베이컨","맛살","단무지","김치","젓갈"],
+        6: ["생수","커피","음료","콜라","주스","사이다","탄산수","맥주","소주","와인","막걸리","술","차","녹차","둥굴레차"],
+        7: ["휴지","물티슈","치약","칫솔","샴푸","린스","비누","바디워시","세제","유연제","기저귀","쓰레기봉투","건전지","수세미","퐁퐁","장갑","멀티탭","전구","빗자루","테이프","봉지"],
+        8: [] // 기타
+    };
+    const CAT_NAMES = { 1:"농산", 2:"정육/수산", 3:"유제품/빵", 4:"가공/조미료", 5:"냉동/냉장", 6:"주류/음료", 7:"생필품", 8:"기타" };
+
+    function classifyItem(name) {
+        for (let catId in CATEGORY_MAP) {
+            if (CATEGORY_MAP[catId].some(keyword => name.includes(keyword))) return parseInt(catId);
+        }
+        return 8;
+    }
+
+    async function init() {
+        if (!myUID) { document.getElementById('auth-overlay').style.display = 'flex'; return; }
+        const snap = await get(ref(db, `users/${myUID}`));
+        if (!snap.exists()) { localStorage.clear(); document.getElementById('auth-overlay').style.display = 'flex'; return; }
+        myInfo = snap.val();
+        render();
+    }
+
+    function render() {
+        document.getElementById('auth-overlay').style.display = 'none';
+        document.getElementById('wait-overlay').style.display = 'none';
+        document.getElementById('main-ui').style.display = 'none';
+
+        if (myInfo.status === 'pending') {
+            document.getElementById('wait-overlay').style.display = 'flex';
+            onValue(ref(db, `users/${myInfo.uid}/status`), (s) => {
+                if(s.val() === 'approved') { myInfo.status = 'approved'; render(); }
+            });
+        } else {
+            document.getElementById('main-ui').style.display = 'flex';
+            initPresence(); loadContent();
+            if(myInfo.role === 'admin') initAdmin();
+        }
+    }
+
+    window.requestAccess = async () => {
+        const idIn = document.getElementById('nickInput').value.trim();
+        const pwIn = document.getElementById('pwInput').value.trim();
+        if(!idIn) return alert("닉네임을 입력하세요.");
+        const configSnap = await get(ref(db, 'app_config/admin'));
+        const adminData = configSnap.val() || { id: "user", pw: "user" };
+        const isAdmin = (idIn === adminData.id && pwIn === adminData.pw);
+        const usersSnap = await get(ref(db, 'users'));
+        const allUsers = usersSnap.val() || {};
+        let existingUser = null;
+        for (let uid in allUsers) { if (allUsers[uid].nick === idIn) { existingUser = allUsers[uid]; break; } }
+        if (existingUser) {
+            if (existingUser.status === 'approved') {
+                if (existingUser.role === 'admin' && !isAdmin) return alert("관리자 계정은 비밀번호가 필요합니다.");
+                myInfo = existingUser;
+            } else { myInfo = existingUser; }
+            localStorage.setItem('userUID', myInfo.uid);
+            render(); return;
+        }
+        const newUID = "u_" + Math.random().toString(36).substr(2, 9);
+        myInfo = { uid: newUID, nick: idIn, role: isAdmin?'admin':'member', status: isAdmin?'approved':'pending' };
+        await set(ref(db, `users/${newUID}`), myInfo);
+        localStorage.setItem('userUID', newUID);
+        render();
+    };
+
+    function initPresence() {
+        const pRef = ref(db, `presence/${myInfo.uid}`);
+        set(pRef, { nick: myInfo.nick });
+        onDisconnect(pRef).remove();
+        onValue(ref(db, 'presence'), (snap) => {
+            const el = document.getElementById('user-status-list'); el.innerHTML = "";
+            const users = snap.val();
+            for(let id in users) el.innerHTML += `<span class="status-tag">🟢 ${users[id].nick}</span>`;
+        });
+    }
+
+    function loadContent() {
+        onValue(ref(db, 'app_config/mart_session'), (snap) => {
+            const s = snap.val(); const b = document.getElementById('mart-banner');
+            const btn = document.getElementById('martBtn');
+            b.style.display = (s && s.active) ? 'block' : 'none';
+            if(s && s.active) {
+                b.innerText = `🛒 ${s.user}님이 마트 이용 중!`;
+                if(s.user === myInfo.nick) btn.classList.add('active');
+            } else btn.classList.remove('active');
+        });
+        onValue(ref(db, 'family_list'), (snap) => {
+            const el = document.getElementById('itemList'); el.innerHTML = '';
+            const data = snap.val(); if(!data) return;
+            const items = Object.keys(data).map(id => ({...data[id], id}))
+                .sort((a, b) => a.cat - b.cat || b.ts - a.ts);
+            items.forEach(item => {
+                const li = document.createElement('li');
+                li.className = item.checked ? 'completed' : '';
+                li.innerHTML = `
+                    <div class="cat-bar" style="background:var(--cat${item.cat})"></div>
+                    <div style="flex:1" onclick="toggle('${item.id}',${item.checked})">
+                        <span class="cat-label" style="background:var(--cat${item.cat})">${CAT_NAMES[item.cat]}</span>
+                        <div style="font-weight:bold; font-size:1.1rem;">${item.name}</div>
+                        <small style="color:#888;">${item.user} · ${item.date}</small>
+                    </div>
+                    <span style="color:var(--danger); cursor:pointer; font-size:1.5rem; padding-left:10px;" onclick="del('${item.id}')">×</span>
+                `;
+                el.appendChild(li);
+            });
+        });
+    }
+
+    function initAdmin() {
+        document.getElementById('admin-panel').style.display = 'block';
+        onValue(ref(db, 'users'), (snap) => {
+            const users = snap.val();
+            const p = document.getElementById('pending-list'); p.innerHTML = "<b>승인 대기:</b>";
+            const a = document.getElementById('approved-list'); a.innerHTML = "<b>가족 목록:</b>";
+            for(let uid in users) {
+                const u = users[uid];
+                const row = document.createElement('div'); row.className = 'member-row';
+                if(u.status === 'pending') {
+                    row.innerHTML = `<span>${u.nick}</span> <button class="sm-btn" style="background:var(--primary)" onclick="approve('${uid}')">승인</button>`;
+                    p.appendChild(row);
+                } else {
+                    const btns = (u.uid !== myInfo.uid) ? `<button class="sm-btn" style="background:var(--danger)" onclick="kick('${uid}')">삭제</button>` : `<small>(관리자)</small>`;
+                    row.innerHTML = `<span>${u.nick}</span> <div>${btns}</div>`;
+                    a.appendChild(row);
+                }
+            }
+        });
+    }
+
+    window.approve = (uid) => update(ref(db, `users/${uid}`), { status: 'approved' });
+    window.kick = (uid) => { if(confirm("멤버를 삭제할까요?")) remove(ref(db, `users/${uid}`)); };
+    window.toggleMart = async () => {
+        const snap = await get(ref(db, 'app_config/mart_session'));
+        const cur = snap.val();
+        const newState = !(cur && cur.active);
+        set(ref(db, 'app_config/mart_session'), { active: newState, user: newState ? myInfo.nick : "" });
+    };
+    const fT = (n) => String(n).padStart(2, '0');
+    window.addItem = () => {
+        const input = document.getElementById('itemInput');
+        const itemName = input.value.trim();
+        if(!itemName) return;
+        const category = classifyItem(itemName);
+        const d = new Date();
+        push(ref(db, 'family_list'), { 
+            name: itemName, cat: category, checked: false, 
+            user: myInfo.nick, ts: Date.now(),
+            date: `${d.getMonth()+1}/${d.getDate()} ${fT(d.getHours())}:${fT(d.getMinutes())}` 
+        });
+        input.value = '';
+    };
+    window.toggle = (id, c) => update(ref(db, `family_list/${id}`), { checked: !c });
+    window.del = (id) => remove(ref(db, `family_list/${id}`));
+    init();
+</script>
+</body>
+</html>
